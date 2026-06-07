@@ -821,7 +821,7 @@ bot.on('callback_query', (query) => {
     // =====================================================================
 
     // --- USER: Select Country (for get_number or change_country) ---
-    if (data === 'user_select_country' || data === 'user_change_country') {
+    if (data === 'user_select_country' || data === 'user_select_country_keep' || data === 'user_change_country') {
         const numbersData = loadNumbers();
         const countries = getCountries(numbersData);
 
@@ -854,9 +854,13 @@ bot.on('callback_query', (query) => {
             }).catch(e => {
                 bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }).catch(e2 => {});
             });
-        } else {
-            // From welcome/expired/otp message - strip old buttons and send fresh
+        } else if (data === 'user_select_country_keep') {
+            // From OTP message - keep the message, just strip buttons
             bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }).catch(e => {});
+            bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }).catch(e => {});
+        } else {
+            // From welcome/expired message - delete old message and send fresh
+            bot.deleteMessage(chatId, messageId).catch(e => {});
             bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }).catch(e => {});
         }
         return bot.answerCallbackQuery(query.id).catch(e => {});
@@ -1053,7 +1057,7 @@ console.log("🚀 Server initialized. Bot is up and running in polling mode.");
                                 reply_markup: {
                                     inline_keyboard: [
                                         [{ text: `🔄 Change Number (${userCountry})`, callback_data: `user_change_number_${userCountry}` }],
-                                        [{ text: '📞 Get New Number', callback_data: 'user_select_country' }]
+                                        [{ text: '📞 Get New Number', callback_data: 'user_select_country_keep' }]
                                     ]
                                 }
                             }).catch(e => console.error("Failed to send OTP to user:", e.message));
