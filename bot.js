@@ -877,6 +877,13 @@ bot.on('callback_query', (query) => {
         const country = data.replace('user_change_number_', '');
         return assignNumber(chatId, messageId, query.id, country, true);
     }
+
+    // --- USER: Change Number from OTP message (keep OTP message) ---
+    if (data.startsWith('user_otp_change_')) {
+        const country = data.replace('user_otp_change_', '');
+        bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }).catch(e => {});
+        return assignNumber(chatId, null, query.id, country, false);
+    }
 });
 
 /* -------------------------------------------------------------------------- */
@@ -961,7 +968,7 @@ function assignNumber(chatId, messageId, queryId, country, isChange) {
             }).catch(e => {});
         });
     } else {
-        bot.deleteMessage(chatId, messageId).catch(e => {});
+        if (messageId) bot.deleteMessage(chatId, messageId).catch(e => {});
         bot.sendMessage(chatId, text, {
             parse_mode: 'Markdown',
             reply_markup: inlineKeyboardOpts
@@ -1056,7 +1063,7 @@ console.log("🚀 Server initialized. Bot is up and running in polling mode.");
                                 parse_mode: 'Markdown',
                                 reply_markup: {
                                     inline_keyboard: [
-                                        [{ text: `🔄 Change Number (${userCountry})`, callback_data: `user_change_number_${userCountry}` }],
+                                        [{ text: `🔄 Change Number (${userCountry})`, callback_data: `user_otp_change_${userCountry}` }],
                                         [{ text: '📞 Get New Number', callback_data: 'user_select_country_keep' }]
                                     ]
                                 }
