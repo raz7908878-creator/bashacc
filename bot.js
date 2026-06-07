@@ -368,24 +368,96 @@ function isAdmin(id) {
 /* -------------------------------------------------------------------------- */
 
 const countryFlags = {
-    'bangladesh': '🇧🇩', 'india': '🇮🇳', 'pakistan': '🇵🇰', 'indonesia': '🇮🇩',
-    'philippines': '🇵🇭', 'vietnam': '🇻🇳', 'thailand': '🇹🇭', 'malaysia': '🇲🇾',
-    'brazil': '🇧🇷', 'nigeria': '🇳🇬', 'egypt': '🇪🇬', 'turkey': '🇹🇷',
-    'russia': '🇷🇺', 'usa': '🇺🇸', 'uk': '🇬🇧', 'canada': '🇨🇦',
-    'australia': '🇦🇺', 'germany': '🇩🇪', 'france': '🇫🇷', 'spain': '🇪🇸',
-    'italy': '🇮🇹', 'japan': '🇯🇵', 'china': '🇨🇳', 'south korea': '🇰🇷',
-    'mexico': '🇲🇽', 'argentina': '🇦🇷', 'colombia': '🇨🇴', 'peru': '🇵🇪',
-    'chile': '🇨🇱', 'south africa': '🇿🇦', 'kenya': '🇰🇪', 'ghana': '🇬🇭',
-    'myanmar': '🇲🇲', 'cambodia': '🇰🇭', 'nepal': '🇳🇵', 'sri lanka': '🇱🇰',
-    'saudi arabia': '🇸🇦', 'uae': '🇦🇪', 'qatar': '🇶🇦', 'kuwait': '🇰🇼',
-    'iran': '🇮🇷', 'iraq': '🇮🇶', 'morocco': '🇲🇦', 'algeria': '🇩🇿',
-    'tunisia': '🇹🇳', 'ukraine': '🇺🇦', 'poland': '🇵🇱', 'romania': '🇷🇴',
-    'netherlands': '🇳🇱', 'sweden': '🇸🇪', 'switzerland': '🇨🇭', 'portugal': '🇵🇹',
-    'default': '🌍'
+    // A
+    'afghanistan': '🇦🇫', 'albania': '🇦🇱', 'algeria': '🇩🇿', 'andorra': '🇦🇩',
+    'angola': '🇦🇴', 'antigua and barbuda': '🇦🇬', 'argentina': '🇦🇷', 'armenia': '🇦🇲',
+    'australia': '🇦🇺', 'austria': '🇦🇹', 'azerbaijan': '🇦🇿',
+    // B
+    'bahamas': '🇧🇸', 'bahrain': '🇧🇭', 'bangladesh': '🇧🇩', 'barbados': '🇧🇧',
+    'belarus': '🇧🇾', 'belgium': '🇧🇪', 'belize': '🇧🇿', 'benin': '🇧🇯',
+    'bhutan': '🇧🇹', 'bolivia': '🇧🇴', 'bosnia': '🇧🇦', 'bosnia and herzegovina': '🇧🇦',
+    'botswana': '🇧🇼', 'brazil': '🇧🇷', 'brunei': '🇧🇳', 'bulgaria': '🇧🇬',
+    'burkina faso': '🇧🇫', 'burundi': '🇧🇮',
+    // C
+    'cabo verde': '🇨🇻', 'cape verde': '🇨🇻', 'cambodia': '🇰🇭', 'cameroon': '🇨🇲',
+    'canada': '🇨🇦', 'central african republic': '🇨🇫', 'chad': '🇹🇩', 'chile': '🇨🇱',
+    'china': '🇨🇳', 'colombia': '🇨🇴', 'comoros': '🇰🇲', 'congo': '🇨🇬',
+    'costa rica': '🇨🇷', 'croatia': '🇭🇷', 'cuba': '🇨🇺', 'cyprus': '🇨🇾',
+    'czech republic': '🇨🇿', 'czechia': '🇨🇿', 'cote d\'ivoire': '🇨🇮', 'ivory coast': '🇨🇮',
+    // D
+    'denmark': '🇩🇰', 'djibouti': '🇩🇯', 'dominica': '🇩🇲', 'dominican republic': '🇩🇴',
+    'dr congo': '🇨🇩', 'drc': '🇨🇩',
+    // E
+    'ecuador': '🇪🇨', 'egypt': '🇪🇬', 'el salvador': '🇸🇻', 'equatorial guinea': '🇬🇶',
+    'eritrea': '🇪🇷', 'estonia': '🇪🇪', 'eswatini': '🇸🇿', 'ethiopia': '🇪🇹',
+    // F
+    'fiji': '🇫🇯', 'finland': '🇫🇮', 'france': '🇫🇷',
+    // G
+    'gabon': '🇬🇦', 'gambia': '🇬🇲', 'georgia': '🇬🇪', 'germany': '🇩🇪',
+    'ghana': '🇬🇭', 'greece': '🇬🇷', 'grenada': '🇬🇩', 'guatemala': '🇬🇹',
+    'guinea': '🇬🇳', 'guinea-bissau': '🇬🇼', 'guyana': '🇬🇾',
+    // H
+    'haiti': '🇭🇹', 'honduras': '🇭🇳', 'hong kong': '🇭🇰', 'hungary': '🇭🇺',
+    // I
+    'iceland': '🇮🇸', 'india': '🇮🇳', 'indonesia': '🇮🇩', 'iran': '🇮🇷',
+    'iraq': '🇮🇶', 'ireland': '🇮🇪', 'israel': '🇮🇱', 'italy': '🇮🇹',
+    // J
+    'jamaica': '🇯🇲', 'japan': '🇯🇵', 'jordan': '🇯🇴',
+    // K
+    'kazakhstan': '🇰🇿', 'kenya': '🇰🇪', 'kiribati': '🇰🇮', 'kosovo': '🇽🇰',
+    'kuwait': '🇰🇼', 'kyrgyzstan': '🇰🇬',
+    // L
+    'laos': '🇱🇦', 'latvia': '🇱🇻', 'lebanon': '🇱🇧', 'lesotho': '🇱🇸',
+    'liberia': '🇱🇷', 'libya': '🇱🇾', 'liechtenstein': '🇱🇮', 'lithuania': '🇱🇹',
+    'luxembourg': '🇱🇺',
+    // M
+    'madagascar': '🇲🇬', 'malawi': '🇲🇼', 'malaysia': '🇲🇾', 'maldives': '🇲🇻',
+    'mali': '🇲🇱', 'malta': '🇲🇹', 'mauritania': '🇲🇷', 'mauritius': '🇲🇺',
+    'mexico': '🇲🇽', 'moldova': '🇲🇩', 'monaco': '🇲🇨', 'mongolia': '🇲🇳',
+    'montenegro': '🇲🇪', 'morocco': '🇲🇦', 'mozambique': '🇲🇿', 'myanmar': '🇲🇲',
+    'macau': '🇲🇴',
+    // N
+    'namibia': '🇳🇦', 'nauru': '🇳🇷', 'nepal': '🇳🇵', 'netherlands': '🇳🇱',
+    'new zealand': '🇳🇿', 'nicaragua': '🇳🇮', 'niger': '🇳🇪', 'nigeria': '🇳🇬',
+    'north korea': '🇰🇵', 'north macedonia': '🇲🇰', 'norway': '🇳🇴',
+    // O
+    'oman': '🇴🇲',
+    // P
+    'pakistan': '🇵🇰', 'palau': '🇵🇼', 'palestine': '🇵🇸', 'panama': '🇵🇦',
+    'papua new guinea': '🇵🇬', 'paraguay': '🇵🇾', 'peru': '🇵🇪', 'philippines': '🇵🇭',
+    'poland': '🇵🇱', 'portugal': '🇵🇹',
+    // Q
+    'qatar': '🇶🇦',
+    // R
+    'romania': '🇷🇴', 'russia': '🇷🇺', 'rwanda': '🇷🇼',
+    // S
+    'saint lucia': '🇱🇨', 'samoa': '🇼🇸', 'san marino': '🇸🇲',
+    'saudi arabia': '🇸🇦', 'senegal': '🇸🇳', 'serbia': '🇷🇸', 'seychelles': '🇸🇨',
+    'sierra leone': '🇸🇱', 'singapore': '🇸🇬', 'slovakia': '🇸🇰', 'slovenia': '🇸🇮',
+    'solomon islands': '🇸🇧', 'somalia': '🇸🇴', 'south africa': '🇿🇦',
+    'south korea': '🇰🇷', 'south sudan': '🇸🇸', 'spain': '🇪🇸', 'sri lanka': '🇱🇰',
+    'sudan': '🇸🇩', 'suriname': '🇸🇷', 'sweden': '🇸🇪', 'switzerland': '🇨🇭',
+    'syria': '🇸🇾',
+    // T
+    'taiwan': '🇹🇼', 'tajikistan': '🇹🇯', 'tanzania': '🇹🇿', 'thailand': '🇹🇭',
+    'timor-leste': '🇹🇱', 'east timor': '🇹🇱', 'togo': '🇹🇬', 'tonga': '🇹🇴',
+    'trinidad and tobago': '🇹🇹', 'tunisia': '🇹🇳', 'turkey': '🇹🇷', 'turkiye': '🇹🇷',
+    'turkmenistan': '🇹🇲', 'tuvalu': '🇹🇻',
+    // U
+    'uganda': '🇺🇬', 'ukraine': '🇺🇦', 'united arab emirates': '🇦🇪', 'uae': '🇦🇪',
+    'united kingdom': '🇬🇧', 'uk': '🇬🇧', 'england': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    'united states': '🇺🇸', 'usa': '🇺🇸', 'us': '🇺🇸',
+    'uruguay': '🇺🇾', 'uzbekistan': '🇺🇿',
+    // V
+    'vanuatu': '🇻🇺', 'vatican': '🇻🇦', 'venezuela': '🇻🇪', 'vietnam': '🇻🇳',
+    // Y
+    'yemen': '🇾🇪',
+    // Z
+    'zambia': '🇿🇲', 'zimbabwe': '🇿🇼'
 };
 
 function getFlag(country) {
-    return countryFlags[country.toLowerCase()] || '🏳️';
+    return countryFlags[country.toLowerCase().trim()] || '🌐';
 }
 
 /* -------------------------------------------------------------------------- */
@@ -396,7 +468,7 @@ bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     if (msg.chat.type !== 'private') return;
 
-    const text = `🌟 *Welcome to the Auto OTP Bot!* 🌟\n\nClick the button below to fetch a number and get started.`;
+    const text = `🌟 *Welcome to the SRF OTP Bot!* 🌟\n\nClick the button below to fetch a number and get started.`;
     const opts = {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -885,7 +957,7 @@ function assignNumber(chatId, messageId, queryId, country, isChange) {
             }).catch(e => {});
         });
     } else {
-        bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }).catch(e => {});
+        bot.deleteMessage(chatId, messageId).catch(e => {});
         bot.sendMessage(chatId, text, {
             parse_mode: 'Markdown',
             reply_markup: inlineKeyboardOpts
