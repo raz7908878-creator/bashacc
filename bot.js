@@ -309,23 +309,34 @@ if (!token) {
 const bot = new TelegramBot(token, { polling: true });
 const dataFilePath = path.join(__dirname, 'numbers.json');
 
-const adminState = {};
-const activeUsers = {}; // Maps chatId -> { number, timeout }
+const adminState = {}; // Maps chatId -> { state, country?, ... }
+const activeUsers = {}; // Maps chatId -> { number, country, timeout, messageId }
 
 /* -------------------------------------------------------------------------- */
 /*                                DATA STORAGE                                */
 /* -------------------------------------------------------------------------- */
 
+// Data format: { "CountryName": ["number1", "number2", ...], ... }
 function loadNumbers() {
     try {
         if (fs.existsSync(dataFilePath)) {
             const data = fs.readFileSync(dataFilePath, 'utf8');
-            return JSON.parse(data);
+            const parsed = JSON.parse(data);
+            // Migration: if old flat array format, convert to new format
+            if (Array.isArray(parsed)) {
+                const migrated = {};
+                if (parsed.length > 0) {
+                    migrated['Default'] = parsed;
+                }
+                saveNumbers(migrated);
+                return migrated;
+            }
+            return parsed;
         }
     } catch (err) {
         console.error("❌ Error reading numbers.json:", err.message);
     }
-    return [];
+    return {};
 }
 
 function saveNumbers(numbers) {
@@ -336,8 +347,45 @@ function saveNumbers(numbers) {
     }
 }
 
+function getCountries(data) {
+    return Object.keys(data).filter(c => data[c] && data[c].length > 0);
+}
+
+function getAllCountries(data) {
+    return Object.keys(data);
+}
+
+function getTotalCount(data) {
+    return Object.values(data).reduce((sum, arr) => sum + arr.length, 0);
+}
+
 function isAdmin(id) {
     return id.toString() === adminId;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           COUNTRY FLAG HELPER                              */
+/* -------------------------------------------------------------------------- */
+
+const countryFlags = {
+    'bangladesh': '🇧🇩', 'india': '🇮🇳', 'pakistan': '🇵🇰', 'indonesia': '🇮🇩',
+    'philippines': '🇵🇭', 'vietnam': '🇻🇳', 'thailand': '🇹🇭', 'malaysia': '🇲🇾',
+    'brazil': '🇧🇷', 'nigeria': '🇳🇬', 'egypt': '🇪🇬', 'turkey': '🇹🇷',
+    'russia': '🇷🇺', 'usa': '🇺🇸', 'uk': '🇬🇧', 'canada': '🇨🇦',
+    'australia': '🇦🇺', 'germany': '🇩🇪', 'france': '🇫🇷', 'spain': '🇪🇸',
+    'italy': '🇮🇹', 'japan': '🇯🇵', 'china': '🇨🇳', 'south korea': '🇰🇷',
+    'mexico': '🇲🇽', 'argentina': '🇦🇷', 'colombia': '🇨🇴', 'peru': '🇵🇪',
+    'chile': '🇨🇱', 'south africa': '🇿🇦', 'kenya': '🇰🇪', 'ghana': '🇬🇭',
+    'myanmar': '🇲🇲', 'cambodia': '🇰🇭', 'nepal': '🇳🇵', 'sri lanka': '🇱🇰',
+    'saudi arabia': '🇸🇦', 'uae': '🇦🇪', 'qatar': '🇶🇦', 'kuwait': '🇰🇼',
+    'iran': '🇮🇷', 'iraq': '🇮🇶', 'morocco': '🇲🇦', 'algeria': '🇩🇿',
+    'tunisia': '🇹🇳', 'ukraine': '🇺🇦', 'poland': '🇵🇱', 'romania': '🇷🇴',
+    'netherlands': '🇳🇱', 'sweden': '🇸🇪', 'switzerland': '🇨🇭', 'portugal': '🇵🇹',
+    'default': '🌍'
+};
+
+function getFlag(country) {
+    return countryFlags[country.toLowerCase()] || '🏳️';
 }
 
 /* -------------------------------------------------------------------------- */
@@ -346,13 +394,13 @@ function isAdmin(id) {
 
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
-    if (msg.chat.type !== 'private') return; // Ignore if typed in group
+    if (msg.chat.type !== 'private') return;
 
     const text = `🌟 *Welcome to the Auto OTP Bot!* 🌟\n\nClick the button below to fetch a number and get started.`;
     const opts = {
         parse_mode: 'Markdown',
         reply_markup: {
-            inline_keyboard: [[{ text: '📞 Get Number', callback_data: 'get_number' }]]
+            inline_keyboard: [[{ text: '📞 Get Number', callback_data: 'user_select_country' }]]
         }
     };
     bot.sendMessage(chatId, text, opts).catch(err => console.error("Failed to send /start:", err.message));
@@ -375,21 +423,32 @@ bot.onText(/\/admin/, (msg) => {
 });
 
 function sendAdminPanel(chatId, messageIdToEdit = null) {
-    const numbers = loadNumbers();
+    const data = loadNumbers();
+    const countries = getAllCountries(data);
     const activeCount = Object.keys(activeUsers).length;
+    const totalNumbers = getTotalCount(data);
+
+    let countryList = '';
+    if (countries.length > 0) {
+        countryList = '\n\n📋 *Countries:*\n';
+        for (const c of countries) {
+            countryList += `  ${getFlag(c)} ${c}: \`${data[c].length}\` numbers\n`;
+        }
+    }
 
     const text = `📊 *Admin Dashboard*\n\n` +
-                 `📥 *Available Numbers:* \`${numbers.length}\`\n` +
-                 `👥 *Active Users Session:* \`${activeCount}\`\n\n` +
+                 `📥 *Total Numbers:* \`${totalNumbers}\`\n` +
+                 `🌍 *Countries:* \`${countries.length}\`\n` +
+                 `👥 *Active Sessions:* \`${activeCount}\`${countryList}\n\n` +
                  `_Select an action below:_`;
 
     const opts = {
         parse_mode: 'Markdown',
         reply_markup: {
             inline_keyboard: [
-                [{ text: '➕ Add Numbers', callback_data: 'admin_add_numbers' }],
-                [{ text: '⬇️ Download Remaining', callback_data: 'admin_download' }],
-                [{ text: '🗑 Clear All Numbers', callback_data: 'admin_clear_prompt' }]
+                [{ text: '➕ Add Numbers', callback_data: 'admin_add_select_country' }],
+                [{ text: '⬇️ Download Numbers', callback_data: 'admin_download_select' }],
+                [{ text: '🗑 Remove Numbers', callback_data: 'admin_remove_select' }]
             ]
         }
     };
@@ -409,35 +468,64 @@ function sendAdminPanel(chatId, messageIdToEdit = null) {
 
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
-    
+    if (!msg.from || !isAdmin(msg.from.id)) return;
+    if (!adminState[chatId]) return;
+    if (!msg.text || msg.text.startsWith('/')) {
+        delete adminState[chatId];
+        return;
+    }
 
-    // --> ADMIN STATE INPUT <--
-    if (msg.from && isAdmin(msg.from.id) && adminState[chatId] === 'awaiting_numbers') {
-        if (!msg.text || msg.text.startsWith('/')) {
+    const state = adminState[chatId];
+
+    // --> AWAITING NEW COUNTRY NAME <--
+    if (state.state === 'awaiting_country_name') {
+        const countryName = msg.text.trim();
+        if (countryName.toLowerCase() === 'cancel') {
             delete adminState[chatId];
-            return;
+            return bot.sendMessage(chatId, "✅ Action cancelled. Use /admin to view dashboard.").catch(e => {});
         }
 
-        // Handle cancellation
+        if (countryName.length === 0 || countryName.length > 50) {
+            return bot.sendMessage(chatId, "⚠️ *Invalid country name.* Please try again or type 'cancel'.", { parse_mode: 'Markdown' }).catch(e => {});
+        }
+
+        // Set state to awaiting numbers for this country
+        adminState[chatId] = { state: 'awaiting_numbers', country: countryName };
+        bot.sendMessage(chatId, `✍️ *Now paste the numbers for* ${getFlag(countryName)} *${countryName}*\n\n_(Paste multiple lines, or type 'cancel' to abort)_`, { parse_mode: 'Markdown' })
+            .catch(e => console.error(e.message));
+        return;
+    }
+
+    // --> AWAITING NUMBERS FOR COUNTRY <--
+    if (state.state === 'awaiting_numbers') {
         if (msg.text.toLowerCase() === 'cancel') {
             delete adminState[chatId];
             return bot.sendMessage(chatId, "✅ Action cancelled. Use /admin to view dashboard.").catch(e => {});
         }
 
+        const country = state.country;
         delete adminState[chatId];
-        const newNumbers = msg.text.split(/[\s,]+/).filter(n => n.trim() !== "");
-        
-        if (newNumbers.length === 0) {
-            return bot.sendMessage(chatId, "⚠️ *No valid numbers found.* Action cancelled.", {parse_mode: 'Markdown'})
-                      .catch(e => {});
-        }
-        
-        let numbers = loadNumbers();
-        numbers = numbers.concat(newNumbers);
-        saveNumbers(numbers);
 
-        bot.sendMessage(chatId, `✅ *Successfully Added!*\n\nAdded \`${newNumbers.length}\` numbers.\nTotal pool: \`${numbers.length}\`\n\n_Use /admin to return to the dashboard._`, {parse_mode: 'Markdown'})
-           .catch(e => console.error(e.message));
+        const newNumbers = msg.text.split(/[\s,]+/).filter(n => n.trim() !== "");
+
+        if (newNumbers.length === 0) {
+            return bot.sendMessage(chatId, "⚠️ *No valid numbers found.* Action cancelled.", { parse_mode: 'Markdown' })
+                .catch(e => {});
+        }
+
+        let data = loadNumbers();
+        if (!data[country]) data[country] = [];
+        data[country] = data[country].concat(newNumbers);
+        saveNumbers(data);
+
+        bot.sendMessage(chatId,
+            `✅ *Successfully Added!*\n\n` +
+            `${getFlag(country)} *Country:* ${country}\n` +
+            `➕ *Added:* \`${newNumbers.length}\` numbers\n` +
+            `📦 *Total in ${country}:* \`${data[country].length}\`\n\n` +
+            `_Use /admin to return to the dashboard._`,
+            { parse_mode: 'Markdown' }
+        ).catch(e => console.error(e.message));
     }
 });
 
@@ -450,155 +538,364 @@ bot.on('callback_query', (query) => {
     const messageId = query.message.message_id;
     const data = query.data;
 
-    // --- ADMIN CALLBACKS ---
+    // =====================================================================
+    //                          ADMIN CALLBACKS
+    // =====================================================================
     if (data.startsWith('admin_')) {
         if (!isAdmin(query.from.id)) {
-            return bot.answerCallbackQuery(query.id, {text: "⛔ Unauthorized", show_alert: true}).catch(e=>{});
+            return bot.answerCallbackQuery(query.id, { text: "⛔ Unauthorized", show_alert: true }).catch(e => {});
         }
 
-        if (data === 'admin_add_numbers') {
-            adminState[chatId] = 'awaiting_numbers';
-            bot.sendMessage(chatId, "✍️ *Send the list of numbers now.*\n\n_(Paste multiple lines, or type 'cancel' to abort)_", {parse_mode: 'Markdown'})
-               .catch(e => console.error(e.message));
-            return bot.answerCallbackQuery(query.id).catch(e=>{});
+        // --- ADMIN: Dashboard ---
+        if (data === 'admin_dashboard') {
+            bot.answerCallbackQuery(query.id).catch(e => {});
+            return sendAdminPanel(chatId, messageId);
         }
 
-        if (data === 'admin_download') {
-            const numbers = loadNumbers();
-            if (numbers.length === 0) {
-                return bot.answerCallbackQuery(query.id, {text: "⚠️ No numbers to download.", show_alert: true}).catch(e=>{});
+        // --- ADMIN: Add Numbers - Select Country ---
+        if (data === 'admin_add_select_country') {
+            const numbersData = loadNumbers();
+            const countries = getAllCountries(numbersData);
+
+            const buttons = [];
+            // Existing countries (2 per row)
+            for (let i = 0; i < countries.length; i += 2) {
+                const row = [];
+                row.push({ text: `${getFlag(countries[i])} ${countries[i]} (${numbersData[countries[i]].length})`, callback_data: `admin_add_to_${countries[i]}` });
+                if (i + 1 < countries.length) {
+                    row.push({ text: `${getFlag(countries[i + 1])} ${countries[i + 1]} (${numbersData[countries[i + 1]].length})`, callback_data: `admin_add_to_${countries[i + 1]}` });
+                }
+                buttons.push(row);
             }
-            
-            const fileBuffer = Buffer.from(numbers.join('\n'), 'utf-8');
-            bot.sendDocument(chatId, fileBuffer, {}, { filename: 'remaining_numbers.txt', contentType: 'text/plain' })
-               .then(() => bot.answerCallbackQuery(query.id))
-               .catch(e => {
-                   console.error("File send error:", e.message);
-                   bot.answerCallbackQuery(query.id, {text: "❌ Failed to send file.", show_alert: true}).catch(e2=>{});
-               });
+            buttons.push([{ text: '🆕 Add New Country', callback_data: 'admin_add_new_country' }]);
+            buttons.push([{ text: '« Back', callback_data: 'admin_dashboard' }]);
+
+            bot.editMessageText("➕ *Add Numbers*\n\nSelect a country to add numbers to, or create a new one:", {
+                chat_id: chatId, message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: buttons }
+            }).catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
+        }
+
+        // --- ADMIN: Add New Country (prompt for name) ---
+        if (data === 'admin_add_new_country') {
+            adminState[chatId] = { state: 'awaiting_country_name' };
+            bot.sendMessage(chatId, "🆕 *Enter the new country name:*\n\n_(Type the country name, or 'cancel' to abort)_", { parse_mode: 'Markdown' })
+                .catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
+        }
+
+        // --- ADMIN: Add to specific country ---
+        if (data.startsWith('admin_add_to_')) {
+            const country = data.replace('admin_add_to_', '');
+            adminState[chatId] = { state: 'awaiting_numbers', country: country };
+            bot.sendMessage(chatId, `✍️ *Paste the numbers for* ${getFlag(country)} *${country}*\n\n_(Paste multiple lines, or type 'cancel' to abort)_`, { parse_mode: 'Markdown' })
+                .catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
+        }
+
+        // --- ADMIN: Download - Select Country ---
+        if (data === 'admin_download_select') {
+            const numbersData = loadNumbers();
+            const countries = getCountries(numbersData);
+
+            if (countries.length === 0) {
+                return bot.answerCallbackQuery(query.id, { text: "⚠️ No numbers to download.", show_alert: true }).catch(e => {});
+            }
+
+            const buttons = [];
+            for (let i = 0; i < countries.length; i += 2) {
+                const row = [];
+                row.push({ text: `${getFlag(countries[i])} ${countries[i]} (${numbersData[countries[i]].length})`, callback_data: `admin_dl_${countries[i]}` });
+                if (i + 1 < countries.length) {
+                    row.push({ text: `${getFlag(countries[i + 1])} ${countries[i + 1]} (${numbersData[countries[i + 1]].length})`, callback_data: `admin_dl_${countries[i + 1]}` });
+                }
+                buttons.push(row);
+            }
+            buttons.push([{ text: '📥 Download All', callback_data: 'admin_dl_all' }]);
+            buttons.push([{ text: '« Back', callback_data: 'admin_dashboard' }]);
+
+            bot.editMessageText("⬇️ *Download Numbers*\n\nSelect a country to download:", {
+                chat_id: chatId, message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: buttons }
+            }).catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
+        }
+
+        // --- ADMIN: Download specific country ---
+        if (data.startsWith('admin_dl_')) {
+            const target = data.replace('admin_dl_', '');
+            const numbersData = loadNumbers();
+
+            let fileContent = '';
+            let filename = '';
+
+            if (target === 'all') {
+                const countries = getCountries(numbersData);
+                for (const c of countries) {
+                    fileContent += `=== ${c} (${numbersData[c].length}) ===\n`;
+                    fileContent += numbersData[c].join('\n') + '\n\n';
+                }
+                filename = 'all_numbers.txt';
+            } else {
+                if (!numbersData[target] || numbersData[target].length === 0) {
+                    return bot.answerCallbackQuery(query.id, { text: "⚠️ No numbers for this country.", show_alert: true }).catch(e => {});
+                }
+                fileContent = numbersData[target].join('\n');
+                filename = `${target}_numbers.txt`;
+            }
+
+            const fileBuffer = Buffer.from(fileContent, 'utf-8');
+            bot.sendDocument(chatId, fileBuffer, {}, { filename, contentType: 'text/plain' })
+                .then(() => bot.answerCallbackQuery(query.id))
+                .catch(e => {
+                    console.error("File send error:", e.message);
+                    bot.answerCallbackQuery(query.id, { text: "❌ Failed to send file.", show_alert: true }).catch(e2 => {});
+                });
             return;
         }
 
-        if (data === 'admin_clear_prompt') {
-            const opts = {
+        // --- ADMIN: Remove - Select Country ---
+        if (data === 'admin_remove_select') {
+            const numbersData = loadNumbers();
+            const countries = getAllCountries(numbersData);
+
+            if (countries.length === 0) {
+                return bot.answerCallbackQuery(query.id, { text: "⚠️ No countries to remove.", show_alert: true }).catch(e => {});
+            }
+
+            const buttons = [];
+            for (let i = 0; i < countries.length; i += 2) {
+                const row = [];
+                row.push({ text: `${getFlag(countries[i])} ${countries[i]} (${numbersData[countries[i]].length})`, callback_data: `admin_rm_prompt_${countries[i]}` });
+                if (i + 1 < countries.length) {
+                    row.push({ text: `${getFlag(countries[i + 1])} ${countries[i + 1]} (${numbersData[countries[i + 1]].length})`, callback_data: `admin_rm_prompt_${countries[i + 1]}` });
+                }
+                buttons.push(row);
+            }
+            buttons.push([{ text: '⚠️ Clear ALL Countries', callback_data: 'admin_clear_all_prompt' }]);
+            buttons.push([{ text: '« Back', callback_data: 'admin_dashboard' }]);
+
+            bot.editMessageText("🗑 *Remove Numbers*\n\nSelect a country to remove:", {
                 chat_id: chatId, message_id: messageId,
                 parse_mode: 'Markdown',
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '⚠️ YES, Delete All', callback_data: 'admin_clear_confirm' }],
-                        [{ text: '❌ Cancel', callback_data: 'admin_dashboard' }]
-                    ]
-                }
-            };
-            bot.editMessageText("🛑 *CAUTION*\n\nAre you sure you want to delete ALL unused numbers?", opts)
-               .catch(e => console.error(e.message));
-            return bot.answerCallbackQuery(query.id).catch(e=>{});
+                reply_markup: { inline_keyboard: buttons }
+            }).catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
         }
 
-        if (data === 'admin_clear_confirm') {
-            saveNumbers([]); // Clear out the file safely
-            bot.answerCallbackQuery(query.id, {text: "🗑 Numbers Cleared!", show_alert: true}).catch(e=>{});
-            return sendAdminPanel(chatId, messageId);
-        }
+        // --- ADMIN: Remove country - Confirm prompt ---
+        if (data.startsWith('admin_rm_prompt_')) {
+            const country = data.replace('admin_rm_prompt_', '');
+            const numbersData = loadNumbers();
+            const count = numbersData[country] ? numbersData[country].length : 0;
 
-        if (data === 'admin_dashboard') {
-            bot.answerCallbackQuery(query.id).catch(e=>{});
-            return sendAdminPanel(chatId, messageId);
-        }
-    }
-
-    // --- USER CALLBACKS ---
-    if (data === 'get_number' || data === 'change_number') {
-        let numbers = loadNumbers();
-
-        if (numbers.length === 0) {
-            return bot.answerCallbackQuery(query.id, { text: "⚠️ No numbers available right now. Please try again later.", show_alert: true }).catch(e=>{});
-        }
-
-        // Clean up previous timer if user had an active number
-        if (activeUsers[chatId]) {
-            clearTimeout(activeUsers[chatId].timeout);
-            delete activeUsers[chatId];
-        }
-
-        const newNumber = numbers.shift(); // Remove from pool permanently
-        saveNumbers(numbers);
-
-        const expirationTimeout = setTimeout(() => {
-            if (activeUsers[chatId] && activeUsers[chatId].number === newNumber) {
-                const targetMsgId = activeUsers[chatId].messageId;
-                delete activeUsers[chatId];
-                
-                const timeText = `⏳ *Time Expired!*\n\n` +
-                                 `Your 15-minute window for number \`${newNumber}\` has ended.\n` +
-                                 `_Need another one? Click below!_`;
-                
-                // Delete the old "Waiting for OTP..." message
-                if (targetMsgId) {
-                    bot.deleteMessage(chatId, targetMsgId).catch(e=>{});
-                }
-                
-                bot.sendMessage(chatId, timeText, {
+            bot.editMessageText(
+                `🛑 *CAUTION*\n\nAre you sure you want to delete all \`${count}\` numbers from ${getFlag(country)} *${country}*?`,
+                {
+                    chat_id: chatId, message_id: messageId,
                     parse_mode: 'Markdown',
                     reply_markup: {
-                        inline_keyboard: [[{ text: '📞 Get New Number', callback_data: 'get_number' }]]
+                        inline_keyboard: [
+                            [{ text: `⚠️ YES, Delete ${country}`, callback_data: `admin_rm_confirm_${country}` }],
+                            [{ text: '❌ Cancel', callback_data: 'admin_remove_select' }]
+                        ]
                     }
-                }).catch(e => console.error("Timeout message fail:", e.message));
+                }
+            ).catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
+        }
+
+        // --- ADMIN: Remove country - Confirmed ---
+        if (data.startsWith('admin_rm_confirm_')) {
+            const country = data.replace('admin_rm_confirm_', '');
+            let numbersData = loadNumbers();
+            delete numbersData[country];
+            saveNumbers(numbersData);
+            bot.answerCallbackQuery(query.id, { text: `🗑 ${country} removed!`, show_alert: true }).catch(e => {});
+            return sendAdminPanel(chatId, messageId);
+        }
+
+        // --- ADMIN: Clear ALL - Confirm prompt ---
+        if (data === 'admin_clear_all_prompt') {
+            bot.editMessageText(
+                "🛑 *CAUTION*\n\nAre you sure you want to delete ALL numbers from ALL countries?",
+                {
+                    chat_id: chatId, message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '⚠️ YES, Delete Everything', callback_data: 'admin_clear_all_confirm' }],
+                            [{ text: '❌ Cancel', callback_data: 'admin_dashboard' }]
+                        ]
+                    }
+                }
+            ).catch(e => console.error(e.message));
+            return bot.answerCallbackQuery(query.id).catch(e => {});
+        }
+
+        // --- ADMIN: Clear ALL - Confirmed ---
+        if (data === 'admin_clear_all_confirm') {
+            saveNumbers({});
+            bot.answerCallbackQuery(query.id, { text: "🗑 All numbers cleared!", show_alert: true }).catch(e => {});
+            return sendAdminPanel(chatId, messageId);
+        }
+    }
+
+    // =====================================================================
+    //                           USER CALLBACKS
+    // =====================================================================
+
+    // --- USER: Select Country (for get_number or change_country) ---
+    if (data === 'user_select_country' || data === 'user_change_country') {
+        const numbersData = loadNumbers();
+        const countries = getCountries(numbersData);
+
+        if (countries.length === 0) {
+            return bot.answerCallbackQuery(query.id, { text: "⚠️ No numbers available right now. Please try again later.", show_alert: true }).catch(e => {});
+        }
+
+        const buttons = [];
+        for (let i = 0; i < countries.length; i += 2) {
+            const row = [];
+            row.push({ text: `${getFlag(countries[i])} ${countries[i]} (${numbersData[countries[i]].length})`, callback_data: `user_get_${countries[i]}` });
+            if (i + 1 < countries.length) {
+                row.push({ text: `${getFlag(countries[i + 1])} ${countries[i + 1]} (${numbersData[countries[i + 1]].length})`, callback_data: `user_get_${countries[i + 1]}` });
             }
-        }, 15 * 60 * 1000); // 15 mins
+            buttons.push(row);
+        }
 
-        activeUsers[chatId] = {
-            number: newNumber,
-            timeout: expirationTimeout,
-            messageId: data === 'change_number' ? messageId : null
-        };
+        const text = `🌍 *Select a Country*\n\n_Choose a country to get a number from:_`;
 
-        const inlineKeyboardOpts = {
-            inline_keyboard: [
-                [
-                    { text: '🔄 Change Number', callback_data: 'change_number' },
-                    { text: '💬 OTP Group', url: 'https://t.me/+9ErqTQYsCv8wYzJl' }
-                ]
-            ]
-        };
-
-        const text = `✅ *Success!* Here is your number:\n\n` +
-                     `📱 \`${newNumber}\`\n\n` + 
-                     `_Waiting for OTP... Maximum time 15 minutes._`;
-        
-        if (data === 'change_number') {
-            // For change number, cleanly edit the current message
+        if (data === 'user_change_country') {
+            // Clean up previous session
+            if (activeUsers[chatId]) {
+                clearTimeout(activeUsers[chatId].timeout);
+                delete activeUsers[chatId];
+            }
             bot.editMessageText(text, {
-                chat_id: chatId,
-                message_id: messageId,
+                chat_id: chatId, message_id: messageId,
                 parse_mode: 'Markdown',
-                reply_markup: inlineKeyboardOpts
-            }).then(() => {
-                 if (activeUsers[chatId]) activeUsers[chatId].messageId = messageId;
-            }).catch(err => {
-                // Fallback if edit fails
-                bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: inlineKeyboardOpts }).then(sentMsg => {
-                    if (activeUsers[chatId]) activeUsers[chatId].messageId = sentMsg.message_id;
-                }).catch(e=>{});
+                reply_markup: { inline_keyboard: buttons }
+            }).catch(e => {
+                bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }).catch(e2 => {});
             });
         } else {
-            // For get_number (from OTP, Expired, or Welcome message), strip old buttons and send a fresh message
-            bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
-                chat_id: chatId,
-                message_id: messageId
-            }).catch(e => {});
-
-            bot.sendMessage(chatId, text, {
-                parse_mode: 'Markdown',
-                reply_markup: inlineKeyboardOpts
-            }).then(sentMsg => {
-                if (activeUsers[chatId]) activeUsers[chatId].messageId = sentMsg.message_id;
-            }).catch(e => {});
+            // From welcome/expired/otp message - strip old buttons and send fresh
+            bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }).catch(e => {});
+            bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }).catch(e => {});
         }
-        
-        bot.answerCallbackQuery(query.id, { text: "✅ Number assigned!" }).catch(e=>{});
+        return bot.answerCallbackQuery(query.id).catch(e => {});
+    }
+
+    // --- USER: Get Number from Country ---
+    if (data.startsWith('user_get_')) {
+        const country = data.replace('user_get_', '');
+        return assignNumber(chatId, messageId, query.id, country, false);
+    }
+
+    // --- USER: Change Number (same country) ---
+    if (data.startsWith('user_change_number_')) {
+        const country = data.replace('user_change_number_', '');
+        return assignNumber(chatId, messageId, query.id, country, true);
     }
 });
+
+/* -------------------------------------------------------------------------- */
+/*                          ASSIGN NUMBER TO USER                             */
+/* -------------------------------------------------------------------------- */
+
+function assignNumber(chatId, messageId, queryId, country, isChange) {
+    let numbersData = loadNumbers();
+
+    if (!numbersData[country] || numbersData[country].length === 0) {
+        return bot.answerCallbackQuery(queryId, { text: `⚠️ No numbers available for ${country}. Try another country.`, show_alert: true }).catch(e => {});
+    }
+
+    // Clean up previous timer if user had an active number
+    if (activeUsers[chatId]) {
+        clearTimeout(activeUsers[chatId].timeout);
+        delete activeUsers[chatId];
+    }
+
+    const newNumber = numbersData[country].shift();
+    saveNumbers(numbersData);
+
+    const expirationTimeout = setTimeout(() => {
+        if (activeUsers[chatId] && activeUsers[chatId].number === newNumber) {
+            const targetMsgId = activeUsers[chatId].messageId;
+            const expiredCountry = activeUsers[chatId].country;
+            delete activeUsers[chatId];
+
+            const timeText = `⏳ *Time Expired!*\n\n` +
+                `${getFlag(expiredCountry)} *Country:* ${expiredCountry}\n` +
+                `Your 15-minute window for number \`${newNumber}\` has ended.\n` +
+                `_Need another one? Click below!_`;
+
+            if (targetMsgId) {
+                bot.deleteMessage(chatId, targetMsgId).catch(e => {});
+            }
+
+            bot.sendMessage(chatId, timeText, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [[{ text: '📞 Get New Number', callback_data: 'user_select_country' }]]
+                }
+            }).catch(e => console.error("Timeout message fail:", e.message));
+        }
+    }, 15 * 60 * 1000);
+
+    activeUsers[chatId] = {
+        number: newNumber,
+        country: country,
+        timeout: expirationTimeout,
+        messageId: isChange ? messageId : null
+    };
+
+    const inlineKeyboardOpts = {
+        inline_keyboard: [
+            [
+                { text: '🔄 Change Number', callback_data: `user_change_number_${country}` },
+                { text: '🌍 Change Country', callback_data: 'user_change_country' }
+            ],
+            [
+                { text: '💬 OTP Group', url: 'https://t.me/+9ErqTQYsCv8wYzJl' }
+            ]
+        ]
+    };
+
+    const text = `✅ *Success!* Here is your number:\n\n` +
+        `${getFlag(country)} *Country:* ${country}\n` +
+        `📱 *Number:* \`${newNumber}\`\n\n` +
+        `_Waiting for OTP... Maximum time 15 minutes._`;
+
+    if (isChange) {
+        bot.editMessageText(text, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown',
+            reply_markup: inlineKeyboardOpts
+        }).then(() => {
+            if (activeUsers[chatId]) activeUsers[chatId].messageId = messageId;
+        }).catch(err => {
+            bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: inlineKeyboardOpts }).then(sentMsg => {
+                if (activeUsers[chatId]) activeUsers[chatId].messageId = sentMsg.message_id;
+            }).catch(e => {});
+        });
+    } else {
+        bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }).catch(e => {});
+        bot.sendMessage(chatId, text, {
+            parse_mode: 'Markdown',
+            reply_markup: inlineKeyboardOpts
+        }).then(sentMsg => {
+            if (activeUsers[chatId]) activeUsers[chatId].messageId = sentMsg.message_id;
+        }).catch(e => {});
+    }
+
+    bot.answerCallbackQuery(queryId, { text: "✅ Number assigned!" }).catch(e => {});
+}
 
 // Graceful shutdown handling
 process.on('SIGINT', () => {
@@ -647,9 +944,9 @@ console.log("🚀 Server initialized. Bot is up and running in polling mode.");
 
             const msgChatIdStr = chat.id.toString();
             const targetGroupIdStr = groupId ? groupId.toString().replace('-100', '') : '';
-            
+
             if (groupId && !(msgChatIdStr.includes(targetGroupIdStr) || ('-100' + msgChatIdStr) === groupId.toString())) {
-                return; // Not our target group
+                return;
             }
 
             const maskedMatch = msg.text.match(/(\d+)[•*]+(\d+)/);
@@ -662,28 +959,33 @@ console.log("🚀 Server initialized. Bot is up and running in polling mode.");
                     const suffix = maskedMatch[2];
                     const otp = otpMatch[1];
 
-                    for (const [uid, data] of Object.entries(activeUsers)) {
-                        if (data.number.startsWith(prefix) && data.number.endsWith(suffix)) {
-                            clearTimeout(data.timeout);
-                            
-                            if (data.messageId) {
-                                bot.deleteMessage(uid, data.messageId).catch(e => {});
+                    for (const [uid, userData] of Object.entries(activeUsers)) {
+                        if (userData.number.startsWith(prefix) && userData.number.endsWith(suffix)) {
+                            clearTimeout(userData.timeout);
+
+                            if (userData.messageId) {
+                                bot.deleteMessage(uid, userData.messageId).catch(e => {});
                             }
-                            
+
+                            const userCountry = userData.country;
                             delete activeUsers[uid];
-                            
+
                             const text = `🎉 *OTP Successfully Received!*\n\n` +
-                                         `📱 *Number:* \`${data.number}\`\n` +
-                                         `🔑 *OTP Code:* \`${otp}\`\n\n` +
-                                         `_Your session is complete. Grab a new number below!_`;
-                            
+                                `${getFlag(userCountry)} *Country:* ${userCountry}\n` +
+                                `📱 *Number:* \`${userData.number}\`\n` +
+                                `🔑 *OTP Code:* \`${otp}\`\n\n` +
+                                `_Your session is complete. Grab a new number below!_`;
+
                             bot.sendMessage(uid, text, {
                                 parse_mode: 'Markdown',
                                 reply_markup: {
-                                    inline_keyboard: [[{ text: '📞 Get New Number', callback_data: 'get_number' }]]
+                                    inline_keyboard: [
+                                        [{ text: `🔄 Change Number (${userCountry})`, callback_data: `user_change_number_${userCountry}` }],
+                                        [{ text: '📞 Get New Number', callback_data: 'user_select_country' }]
+                                    ]
                                 }
                             }).catch(e => console.error("Failed to send OTP to user:", e.message));
-                            
+
                             break;
                         }
                     }
