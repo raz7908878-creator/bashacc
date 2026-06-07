@@ -306,7 +306,7 @@ if (!token) {
     process.exit(1);
 }
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: false });
 const dataFilePath = path.join(__dirname, 'numbers.json');
 
 const adminState = {}; // Maps chatId -> { state, country?, ... }
@@ -316,30 +316,67 @@ const activeUsers = {}; // Maps chatId -> { number, country, timeout, messageId 
 /*                                DATA STORAGE                                */
 /* -------------------------------------------------------------------------- */
 
-// Data format: { "CountryName": ["number1", "number2", ...], ... }
-function loadNumbers() {
+const { Redis } = require('@upstash/redis');
+let redis = null;
+let redisConnected = false;
+let numbersDataCache = {};
+
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+    console.log("✅ Configured Upstash Redis (REST)");
+    redisConnected = true;
+}
+
+async function initDB() {
+    if (redis) {
+        try {
+            const data = await redis.get('numbersData');
+            if (data) {
+                numbersDataCache = typeof data === 'string' ? JSON.parse(data) : data;
+                console.log("✅ Loaded numbers from Redis.");
+                return;
+            }
+        } catch (err) {
+            console.error("❌ Failed to load from Redis:", err.message);
+        }
+    }
+    
+    // Fallback to local file
     try {
         if (fs.existsSync(dataFilePath)) {
             const data = fs.readFileSync(dataFilePath, 'utf8');
             const parsed = JSON.parse(data);
-            // Migration: if old flat array format, convert to new format
             if (Array.isArray(parsed)) {
-                const migrated = {};
-                if (parsed.length > 0) {
-                    migrated['Default'] = parsed;
-                }
-                saveNumbers(migrated);
-                return migrated;
+                numbersDataCache = {};
+                if (parsed.length > 0) numbersDataCache['Default'] = parsed;
+                saveNumbers(numbersDataCache);
+            } else {
+                numbersDataCache = parsed;
             }
-            return parsed;
+            console.log("✅ Loaded numbers from local JSON file.");
+        } else {
+            numbersDataCache = {};
         }
     } catch (err) {
         console.error("❌ Error reading numbers.json:", err.message);
+        numbersDataCache = {};
     }
-    return {};
+}
+
+// Data format: { "CountryName": ["number1", "number2", ...], ... }
+function loadNumbers() {
+    return numbersDataCache;
 }
 
 function saveNumbers(numbers) {
+    numbersDataCache = numbers;
+    if (redisConnected && redis) {
+        redis.set('numbersData', JSON.stringify(numbers)).catch(e => console.error("Redis save error:", e.message));
+    }
+    // Also save locally as a backup
     try {
         fs.writeFileSync(dataFilePath, JSON.stringify(numbers, null, 2));
     } catch (err) {
@@ -986,10 +1023,12 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
-console.log("🚀 Server initialized. Bot is up and running in polling mode.");
-
-// Start GramJS Userbot silent listener
+// Start bot and GramJS Userbot silent listener
 (async () => {
+    await initDB();
+    bot.startPolling();
+    console.log("🚀 Server initialized. Bot is up and running in polling mode.");
+
     if (!apiId || !apiHash) {
         console.warn("⚠️ API_ID or API_HASH missing in .env. Silent group listener will NOT start.");
         return;
