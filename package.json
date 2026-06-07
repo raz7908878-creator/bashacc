@@ -12,9 +12,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "input": "^1.0.1",
+    "ioredis": "^5.11.1",
     "node-telegram-bot-api": "^0.67.0",
     "telegram": "^2.26.22"
   }
