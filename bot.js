@@ -505,7 +505,7 @@ bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     if (msg.chat.type !== 'private') return;
 
-    const text = `🌟 *Welcome to the SRF OTP Bot!* 🌟\n\nClick the button below to fetch a number and get started.`;
+    const text = `🌟 *Welcome to SRF OTP Bot* 🌟\n\nWelcome to the most reliable automated OTP service.\n\n👉 *Click the button below to fetch a number and get started.*`;
     const opts = {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -545,11 +545,12 @@ function sendAdminPanel(chatId, messageIdToEdit = null) {
         }
     }
 
-    const text = `📊 *Admin Dashboard*\n\n` +
+    const text = `⚙️ *Admin Dashboard*\n\n` +
+                 `📊 *System Overview*\n` +
                  `📥 *Total Numbers:* \`${totalNumbers}\`\n` +
                  `🌍 *Countries:* \`${countries.length}\`\n` +
                  `👥 *Active Sessions:* \`${activeCount}\`${countryList}\n\n` +
-                 `_Select an action below:_`;
+                 `_Select an action below to manage the bot:_`;
 
     const opts = {
         parse_mode: 'Markdown',
@@ -876,7 +877,7 @@ bot.on('callback_query', (query) => {
             buttons.push(row);
         }
 
-        const text = `🌍 *Select a Country*\n\n_Choose a country to get a number from:_`;
+        const text = `🌍 *Select a Country*\n\n_Please choose the country you would like to get a number from:_`;
 
         if (data === 'user_change_country') {
             // Clean up previous session
@@ -950,9 +951,9 @@ function assignNumber(chatId, messageId, queryId, country, isChange) {
             delete activeUsers[chatId];
 
             const timeText = `⏳ *Time Expired!*\n\n` +
-                `${getFlag(expiredCountry)} *Country:* ${expiredCountry}\n` +
-                `Your 15-minute window for number \`${newNumber}\` has ended.\n` +
-                `_Need another one? Click below!_`;
+                `🌍 *Country:* ${getFlag(expiredCountry)} ${expiredCountry}\n\n` +
+                `Your 15-minute window for number \`${newNumber}\` has ended.\n\n` +
+                `_Need another number? Click below to start over!_`;
 
             if (targetMsgId) {
                 bot.deleteMessage(chatId, targetMsgId).catch(e => {});
@@ -986,10 +987,10 @@ function assignNumber(chatId, messageId, queryId, country, isChange) {
         ]
     };
 
-    const text = `✅ *Success!* Here is your number:\n\n` +
-        `${getFlag(country)} *Country:* ${country}\n` +
-        `📱 *Number:* \`${newNumber}\`\n\n` +
-        `_Waiting for OTP... Maximum time 15 minutes._`;
+    const text = `✅ *Number Successfully Assigned!*\n\n` +
+        `🌍 *Country:* ${getFlag(country)} ${country}\n` +
+        `📱 *Phone Number:* \`${newNumber}\`\n\n` +
+        `⏳ _Waiting for OTP... (Maximum time: 15 minutes)_`;
 
     if (isChange) {
         bot.editMessageText(text, {
@@ -1092,9 +1093,9 @@ process.on('SIGINT', () => {
                             const userCountry = userData.country;
                             delete activeUsers[uid];
 
-                            const text = `🎉 *OTP Successfully Received!*\n\n` +
-                                `${getFlag(userCountry)} *Country:* ${userCountry}\n` +
-                                `📱 *Number:* \`${userData.number}\`\n` +
+                            const text = `🎉 *OTP Successfully Received!* 🎉\n\n` +
+                                `🌍 *Country:* ${getFlag(userCountry)} ${userCountry}\n` +
+                                `📱 *Phone Number:* \`${userData.number}\`\n` +
                                 `🔑 *OTP Code:* \`${otp}\`\n\n` +
                                 `_Your session is complete. Grab a new number below!_`;
 
